@@ -1,0 +1,321 @@
+---
+title: "Do ER-positive tumors get detected earlier and have better survival compared to ER-negative tumors?"
+author: 
+  name: "SID: 540920996"
+  affiliation: "University of Sydney"
+date: "`r Sys.Date()`"
+format:
+  html:
+    fig-cap: false
+    embed-resources: true
+    code-fold: true
+    toc: true
+    toc-depth: 3
+    toc-floating: true
+    
+editor: visual
+---
+
+## 1. Client Bio 👤
+
+[NSW Cancer Institute](https://www.cancer.nsw.gov.au) 🔗
+
+![](images.jpeg)
+
+NSW Cancer Institute is New South Wales’ state agency for cancer control, designing and implementing evidence-based programs from, BreastScreen NSW to targeted community outreach, and funding research to improve patient outcomes. Committed to reducing health disparities, it partners together with healthcare providers to tailor screening and follow-up strategies for high risk-groups.
+
+## 2. Recommendation 📌
+
+We recommend the NSW Cancer Institute fund targeted research into early detection methods for ER-negative breast cancers and implement ER-status–tailored screening providing enhanced surveillance, expedited diagnostics, and dedicated education and support to ensure timely follow up and improved survival for this higher risk population.
+
+## 3. Evidence 📊
+
+### 3.1 Data Cleaning 🧹
+
+```{r data-cleaning, message=FALSE, warning=FALSE, results='hide'}
+library(tidyverse)
+library(janitor)
+
+breast_clean <- read_csv("breast_cancer.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(across(where(is.character), str_trim)) %>%
+  rename(
+    overall_stage          = x6th_stage,
+    regional_node_positive = reginol_node_positive,
+    differentiation_status = differentiate,
+    historic_stage_a       = a_stage,
+    er_status              = estrogen_status,
+    pr_status              = progesterone_status
+  ) %>%
+  mutate(
+    grade = case_when(
+      str_detect(grade, "Grade I$")   ~ "1",
+      str_detect(grade, "Grade II$")  ~ "2",
+      str_detect(grade, "Grade III$") ~ "3",
+      str_detect(grade, "Grade IV$")  ~ "4",
+      TRUE                            ~ grade
+    ) %>%
+      factor(levels = c("1","2","3","4"), ordered = TRUE),
+    age                    = as.integer(age),
+    tumor_size             = as.numeric(tumor_size),
+    regional_node_examined = as.integer(regional_node_examined),
+    regional_node_positive = as.integer(regional_node_positive),
+    survival_months        = as.numeric(survival_months),
+    race                   = factor(race, levels = c("White","Black","Other")),
+    marital_status         = factor(marital_status),
+    t_stage                = factor(t_stage, levels = c("T1","T2","T3","T4"), ordered = TRUE),
+    n_stage                = factor(n_stage, levels = c("N0","N1","N2","N3"), ordered = TRUE),
+    overall_stage          = factor(overall_stage,
+                                   levels = c("I","IIA","IIB","IIIA","IIIB","IIIC","IV"),
+                                   ordered = TRUE),
+    differentiation_status = factor(differentiation_status),
+    historic_stage_a       = factor(historic_stage_a),
+    er_status              = factor(er_status, levels = c("Negative","Positive")),
+    pr_status              = factor(pr_status, levels = c("Negative","Positive")),
+    status                 = factor(status, levels = c("Alive","Dead"))
+  ) %>%
+  distinct()
+
+
+```
+
+For the 4,024×16 SEER Dataset, Data cleaning was used to achieve standardized formats, correct mislabeled fields, and recast key variables as ordered factors. One duplicate was removed, ensuring clarity and data integrity for reproducible analysis.
+
+<hr>
+
+### 3.2 Graphical summary 📈
+
+#### A. Bar chart of Stage by ER status
+
+The bar chart in Figure 1 shows the proportion of patients diagnosed at an early (I–IIA–IIB) versus late (IIIA–IIIC–IV) stage, stratified by ER status.
+
+```{r fig-stage-bar}
+#| fig-cap: ""
+#| echo: true
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+stage_data <- breast_clean %>%
+  mutate(
+    stage_cat = case_when(
+      overall_stage %in% c("I", "IIA", "IIB")            ~ "Early",
+      overall_stage %in% c("IIIA", "IIIB", "IIIC", "IV") ~ "Late",
+      TRUE                                               ~ NA_character_
+    ) %>% factor(levels = c("Early", "Late"))
+  )
+
+ggplot(stage_data, aes(x = er_status, fill = stage_cat)) +
+  geom_bar(position = "fill", width = 0.6) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  labs(
+    title = "Figure 1: Proportion of patients by ER stage",
+    x     = "ER Status",
+    y     = "Proportion of Patients",
+    fill  = "Stage Category"
+  ) +
+  theme_minimal()
+
+
+```
+
+In Figure 1, the ER-positive bar is roughly 62% “Early” and 38% “Late,” whereas ER-negative is 45% “Early” and 55% “Late.” This visually reinforces our table: ER-positive cancers are more often caught at an earlier stage.'
+
+#### B. Boxplot of Overall Survival by ER Status
+
+we use a boxplot to compare the distribution of survival times (in months) between ER-positive and ER-negative patients.
+
+```{r boxplot-survival, echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+breast_clean %>%
+  ggplot(aes(x = er_status, 
+             y = survival_months, 
+             fill = er_status)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8, width = 0.6) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position     = "none",
+    panel.grid.major.x  = element_blank(),
+    panel.grid.minor    = element_blank()
+  ) +
+  labs(
+    title = "Figure 2: Overall Survival by ER Status",
+    x     = "ER Status",
+    y     = "Survival Time (months)"
+  )
+
+
+
+```
+
+In Figure 2, the median survival for ER-positive patients (the line inside the right box) lies at 73 months, compared with 64 months for ER-negative (left box). The narrower box for ER-positive indicates less variability in survival times, while ER-negative shows a wider spread and more outliers. This again supports that ER-positive status is associated with longer and more consistent survival.
+
+<hr>
+
+### 3.3 Hypothesis Testing 🤔
+
+#### 1. Stage at Diagnosis
+
+-   **H₀:** ER status and stage category are independent.
+-   **H₁:** ER status is associated with stage at diagnosis.
+
+#### 2. Survival Time
+
+-   **H₀:** Survival distributions are the same for ER-positive and ER-negative patients.
+
+-   **H₁:** The survival distributions differ between ER groups.
+
+#### Assumptions (FOR BOTH TESTS)
+
+-   **Independence of observations**\
+    We assume each patient’s data (whether their detection stage or their survival time) is independent of every other patient’s.
+
+-   **Homogeneity of chance within groups**\
+    We assume that, within each ER-status category, all patients have the same underlying probability of being detected early (for the χ² test) and the same baseline survival (for the log-rank test).
+
+#### Stage at Diagnosis
+
+```{r stage-test-simple, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+stage_cat <- ifelse(
+  breast_clean$overall_stage %in% c("I","IIA","IIB"), 
+  "Early", 
+  "Late"
+)
+
+tbl <- table(
+  ER_Status = breast_clean$er_status,
+  Stage     = factor(stage_cat, levels = c("Early","Late"))
+)
+print(tbl)
+
+chi <- chisq.test(tbl)
+cat("Chi-square =", round(chi$statistic,2),
+    " df =", chi$parameter,
+    " p =", signif(chi$p.value,3), "\n")
+
+prop <- prop.test(x = tbl[, "Early"], n = rowSums(tbl))
+cat("Early-stage proportions:", 
+    round(prop$estimate*100,1), "%\n",
+    "95% CI:", paste0(round(prop$conf.int*100,1), collapse = " – "), "%\n",
+    "p =", signif(prop$p.value,3), "\n")
+
+
+```
+
+"We carried out a chi-square test to see if ER status and stage at diagnosis are related. The test produced a highly significant result (χ² = 27.01, df = 1, p \< 0.001), which tells us the two are not independent. Looking at the raw proportions, 61.6% of ER-positive patients were diagnosed at an early stage compared with only 45.4% of ER-negative patients—a difference of 16.2 percentage points. The 95% confidence interval for that difference spans roughly 9.9% to 22.6% (reported as -22.6 to -9.9% in the opposite direction), and its p-value is also \< 0.001. Because these p-values are well below our 0.05 threshold, we reject the null hypothesis that ER status has no effect on stage at diagnosis and conclude there is a real, statistically significant association between ER status and how early the cancer is caught."
+
+#### Survival Time
+
+```{r logrank-survival, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+library(survival)
+
+surv_diff <- survdiff(
+  Surv(survival_months, status == "Dead") ~ er_status,
+  data = breast_clean
+)
+
+surv_diff
+
+chi_stat <- surv_diff$chisq
+df       <- length(surv_diff$n) - 1
+p_val    <- 1 - pchisq(chi_stat, df)
+
+cat(
+  "Log-rank test:\n",
+  "  Chi-square =", round(chi_stat, 2),
+  " on", df, "df;\n",
+  "  p-value =", signif(p_val, 3), "\n"
+)
+
+```
+
+The log-rank test comparing overall survival between ER-positive and ER-negative patients produced a chi-square statistic of 172.16 (1 df) with a p-value effectively zero (\<2 × 10⁻¹⁶). This overwhelmingly significant result tells us that the survival curves for the two groups are not the same ER-positive patients live substantially longer than ER negative patients. Therefore, we confidently reject the null hypothesis and conclude that estrogen-receptor status has a profound impact on patient survival.
+
+<hr>
+
+### 3.4 Limitations **❌**
+
+-   **Data Imbalance & ER Subgroup Size:** Only 269 ER-negative tumors (6.7%) versus 3,755 ER-positive (93.3%) limit the power to detect differences in ER-negative patients, yielding wide confidence intervals.
+
+-   **Static ER Measurement & Temporal Bias:** ER status was recorded only at diagnosis, missing potential receptor changes post-therapy, while data from 2006–2010 may not reflect current demographics, screening, or treatment practices.
+
+-   **Unmeasured Prognostic Factors:** Analysis adjust only for stage and ER status, omitting other key factors like age and tumor grade.
+
+<hr>
+
+### 3.5 External Evidence ✍️
+
+-   The study "Strength of ER-positivity in relation to survival in ER-positive breast cancer treated by adjuvant tamoxifen" examined how varying levels of ER expression impacted detection stage and survival in breast cancer patients on tamoxifen. Higher ER positivity was linked to better survival, highlighting the prognostic value of ER quantification (Morgan et al., 2010).
+
+-   A retrospective cohort study by Belete et al. (2022) at Black Lion Specialized Hospital, Ethiopia, found that ER-positive breast cancer patients had lower mortality (5.48 vs. 10.47 per 1,000 person-years) and higher 6-year survival (41.51% vs. 21.01%) than ER-negative patients, emphasizing the prognostic value of ER status.(Belete et al., 2022).
+
+<hr>
+
+### 3.6 References **📖**
+
+Morgan, D. A., Refalo, N. A., & Cheung, K. L. (2010). Strength of ER-positivity in relation to survival in ER-positive breast cancer treated by adjuvant tamoxifen as sole systemic therapy. The Breast, 20(3), 215–219. https://doi.org/10.1016/j.breast.2010.11.004
+
+Belete, A. M., Aynalem, Y. A., Gemeda, B. N., Demelew, T. M., & Shiferaw, W. S. (2022). The effect of estrogen receptor status on survival in breast cancer patients in Ethiopia. Retrospective cohort study. *Breast Cancer Targets and Therapy*, *Volume 14*, 153–161. https://doi.org/10.2147/bctt.s365295
+
+## 4. Ethics Statement **⚖️**
+
+Alignment with the ISI Shared Value of Professionalism is achieved by focusing the analysis on the NSW Cancer Institute’s mission to reduce cancer burden and eliminate disparities. The Ethical Principle of Objectivity is maintained through transparent, data-appropriate statistical methods, ensuring impartial, evidence-based recommendations.
+
+## 5. AI usage statement 🤖
+
+-   **Tool:** ChatGPT (OpenAI GPT)
+
+-   **Version:** GPT
+
+-   **Dates of use:** May 12, 2025
+
+-   **Session link:** <https://chatgpt.com/share/6821caf7-2c38-8011-93aa-250d392e359b>
+
+-   **Summary of use:**
+
+    -   **Background section:** AI was used to gather and summarize information on our client, the NSW Cancer Institute
+
+    -   **Introduction:** AI-assisted paraphrasing of the research question and introductory text.
+
+    -   **Discussion/Implications:** Language refinement around tailored screening recommendations for ER-negative patients.
+
+## 6. Acknowledgement **🙏**
+
+**Stack Overflow**\
+Provided the solution for calculating group-wise percentage counts with **dplyr**, which we used to quantify and compare late-stage diagnosis rates by ER status.\
+[Percentage count by group using dplyr](https://stackoverflow.com/questions/42874619/percentage-count-by-group-using-dplyr)
+
+**W3Schools**\
+Offered concise overviews of core R functions that guided our development of streamlined data‐processing scripts.\
+[R functions overview](https://www.w3schools.com/r/r_functions.asp)
+
+**ED Lessons Extension Content**
+
+-   Topic 3 Extension \| Handy Functions for Numerical Summaries (e.g. `count()`, `summarise()`, percent calculations)
+
+-   Topic 4 Extension \| Data Transformation (dplyr’s `mutate()`, `filter()`, `group_by()`)
+
+**ED posts**
+
+Used Student Ed posts for understanding about dataset limitations
+
+1.  <https://edstem.org/au/courses/19992/discussion/2621137>
+
+2.  <https://edstem.org/au/courses/19992/discussion/2651566>
+
+3.  <https://edstem.org/au/courses/19992/discussion/2632360>
+
+**Example 1 Project**
+
+1.  It was used to get some understanding of formatting and interface
+
+**External Evidence (see reference list)**
+
+-   https://doi.org/10.1016/j.breast.2010.11.004
+
+-   https://doi.org/10.2147/bctt.s365295
